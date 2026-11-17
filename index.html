@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>신앙생활 점검</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Noto+Serif+KR:wght@700&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#1f2a44;--bg:#eef2f7;--card:#fff;--leaf:#3f7d6b;--gold:#e0a83a;--line:#d5dce6;--muted:#66728a;--r:14px}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 "Noto Sans KR",system-ui,sans-serif;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+main{max-width:560px;margin:0 auto;padding:20px 16px 48px}
+h1{font:700 28px/1.3 "Noto Serif KR",serif;margin:8px 0 4px}
+.sub{color:var(--muted);margin:0 0 20px}
+.who{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+input,textarea{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;background:#fff;color:inherit}
+input:focus,textarea:focus,button:focus-visible{outline:3px solid var(--gold);outline-offset:1px}
+.week{display:flex;align-items:center;justify-content:space-between;background:var(--ink);color:#fff;border-radius:var(--r);padding:10px 12px;margin-bottom:6px}
+.week b{font-weight:500}
+.week button{background:none;border:0;color:#fff;font-size:22px;padding:2px 12px;cursor:pointer}
+.score{text-align:right;color:var(--muted);font-size:14px;margin:0 4px 14px}
+.score strong{color:var(--leaf);font-size:18px}
+section{background:var(--card);border-radius:var(--r);padding:16px;margin-bottom:12px;border-left:6px solid var(--leaf)}
+section.g{border-left-color:var(--gold)}
+h2{font-size:18px;margin:0}
+.hint{margin:0 0 12px;color:var(--muted);font-size:14px}
+.days{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;text-align:center;font-size:12px;color:var(--muted)}
+.dot{width:100%;aspect-ratio:1;max-width:46px;margin:2px auto 0;border-radius:50%;border:2px solid var(--line);background:#fff;font:500 14px "Noto Sans KR";color:var(--ink);cursor:pointer;display:block}
+.dot.on{background:var(--leaf);border-color:var(--leaf);color:#fff}
+.dot.today{box-shadow:0 0 0 3px var(--gold)}
+.big{width:100%;padding:14px;border-radius:12px;border:2px solid var(--line);background:#fff;font:500 16px "Noto Sans KR";cursor:pointer;color:var(--ink)}
+.big.on{background:var(--gold);border-color:var(--gold)}
+.save{width:100%;margin-top:6px;padding:15px;border:0;border-radius:12px;background:var(--ink);color:#fff;font:700 17px "Noto Sans KR";cursor:pointer}
+.save:disabled{opacity:.5}
+#msg{min-height:24px;text-align:center;margin-top:10px;font-size:14px;color:var(--muted)}
+#msg.err{color:#b3261e}
+</style>
+</head>
+<body>
+<main>
+  <h1>이번 주 신앙생활</h1>
+  <p class="sub">한 주를 돌아보며 체크해 보세요.</p>
+
+  <div class="who">
+    <input id="name" placeholder="이름" autocomplete="name">
+    <input id="grp" placeholder="구역 / 사랑방 이름">
+  </div>
+
+  <div class="week">
+    <button id="prev" aria-label="지난주">‹</button>
+    <b id="range"></b>
+    <button id="next" aria-label="다음주">›</button>
+  </div>
+  <p class="score">이번 주 <strong id="total">0</strong> / 16</p>
+
+  <section>
+    <h2>성경읽기</h2>
+    <p class="hint">읽은 날을 눌러 주세요.</p>
+    <div class="days" id="bible"></div>
+  </section>
+
+  <section>
+    <h2>중보기도</h2>
+    <p class="hint">기도한 날을 눌러 주세요.</p>
+    <div class="days" id="prayer"></div>
+  </section>
+
+  <section class="g">
+    <h2>전도대</h2>
+    <p class="hint">이번 주 전도대 활동에 참여했나요?</p>
+    <button class="big" id="evang">참여했어요</button>
+  </section>
+
+  <section class="g">
+    <h2>사랑방모임</h2>
+    <p class="hint">이번 주 사랑방모임에 참석했나요?</p>
+    <button class="big" id="group">참석했어요</button>
+  </section>
+
+  <section>
+    <h2>나눔 메모</h2>
+    <textarea id="memo" rows="3" placeholder="기도제목이나 감사한 일을 적어 보세요."></textarea>
+  </section>
+
+  <button class="save" id="save">저장하기</button>
+  <div id="msg"></div>
+</main>
+
+<script>
+// ▼ Apps Script 웹 앱 배포 URL을 여기에 붙여넣으세요
+const API_URL = "";
+
+const DAYS = ["일","월","화","수","목","금","토"];
+const $ = id => document.getElementById(id);
+const pad = n => String(n).padStart(2, "0");
+const key = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate()+n); return x; };
+const startOfWeek = d => addDays(new Date(d.getFullYear(), d.getMonth(), d.getDate()), -d.getDay());
+
+let week = startOfWeek(new Date());
+let S = blank();
+function blank(){ return {bible:Array(7).fill(0), prayer:Array(7).fill(0), evang:0, group:0, memo:""}; }
+
+function say(t, err){ const m=$("msg"); m.textContent=t; m.className=err?"err":""; }
+
+function drawDays(id, arr){
+  const el = $(id); el.innerHTML = "";
+  const todayKey = key(new Date());
+  arr.forEach((v, i) => {
+    const d = addDays(week, i);
+    const cell = document.createElement("div");
+    cell.innerHTML = `<span>${DAYS[i]}</span>`;
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "dot" + (v ? " on" : "") + (key(d) === todayKey ? " today" : "");
+    b.textContent = d.getDate();
+    b.setAttribute("aria-pressed", !!v);
+    b.onclick = () => { arr[i] = arr[i] ? 0 : 1; render(); };
+    cell.appendChild(b);
+    el.appendChild(cell);
+  });
+}
+
+function render(){
+  const end = addDays(week, 6);
+  $("range").textContent = `${week.getMonth()+1}월 ${week.getDate()}일 – ${end.getMonth()+1}월 ${end.getDate()}일`;
+  drawDays("bible", S.bible);
+  drawDays("prayer", S.prayer);
+  $("evang").classList.toggle("on", !!S.evang);
+  $("group").classList.toggle("on", !!S.group);
+  $("memo").value = S.memo;
+  $("total").textContent = S.bible.reduce((a,b)=>a+b,0) + S.prayer.reduce((a,b)=>a+b,0) + S.evang + S.group;
+}
+
+async function load(){
+  S = blank(); render();
+  const name = $("name").value.trim();
+  if (!API_URL || !name) return;
+  say("불러오는 중…");
+  try {
+    const r = await fetch(`${API_URL}?week=${key(week)}&name=${encodeURIComponent(name)}`);
+    const j = await r.json();
+    if (j.data) {
+      S = { bible:j.data.bible.split("").map(Number), prayer:j.data.prayer.split("").map(Number),
+            evang:+j.data.evang, group:+j.data.group, memo:j.data.memo || "" };
+      if (j.data.grp && !$("grp").value) $("grp").value = j.data.grp;
+    }
+    render(); say("");
+  } catch (e) { say("불러오지 못했어요. 네트워크를 확인해 주세요.", true); }
+}
+
+async function save(){
+  const name = $("name").value.trim();
+  if (!name) return say("이름을 입력해 주세요.", true);
+  if (!API_URL) return say("index.html의 API_URL을 먼저 설정해 주세요.", true);
+  S.memo = $("memo").value;
+  localStorage.setItem("church-name", name);
+  localStorage.setItem("church-grp", $("grp").value);
+  $("save").disabled = true; say("저장 중…");
+  try {
+    const r = await fetch(API_URL, {
+      method: "POST",
+      headers: {"Content-Type": "text/plain;charset=utf-8"},
+      body: JSON.stringify({ week:key(week), name, grp:$("grp").value.trim(),
+        bible:S.bible.join(""), prayer:S.prayer.join(""), evang:S.evang, group:S.group, memo:S.memo })
+    });
+    const j = await r.json();
+    say(j.ok ? "저장했어요." : "저장하지 못했어요: " + j.error, !j.ok);
+  } catch (e) { say("저장하지 못했어요. 잠시 후 다시 시도해 주세요.", true); }
+  $("save").disabled = false;
+}
+
+$("prev").onclick = () => { week = addDays(week, -7); load(); };
+$("next").onclick = () => { week = addDays(week, 7); load(); };
+$("evang").onclick = () => { S.evang = S.evang ? 0 : 1; render(); };
+$("group").onclick = () => { S.group = S.group ? 0 : 1; render(); };
+$("save").onclick = save;
+$("name").addEventListener("change", load);
+
+try {
+  $("name").value = localStorage.getItem("church-name") || "";
+  $("grp").value = localStorage.getItem("church-grp") || "";
+} catch (e) {}
+load();
+</script>
+</body>
+</html>
